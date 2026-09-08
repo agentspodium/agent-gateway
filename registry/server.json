@@ -8,7 +8,7 @@
     "source": "github"
   },
   "websiteUrl": "https://hosting.defispace.com/docs/mcp.html",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "remotes": [
     {
       "type": "streamable-http",

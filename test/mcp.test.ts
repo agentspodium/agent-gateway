@@ -142,14 +142,14 @@ describe("MCP endpoint", () => {
         "list_platforms",
         "list_instances",
         "create_instance",
-        "instance_health",
-        "instance_term",
+        "get_instance_health",
+        "get_instance_term",
         "set_llm_key",
         "pause_instance",
         "resume_instance",
         "rebuild_instance",
         "delete_instance",
-        "payment_options",
+        "get_payment_options",
         "set_peers",
       ]),
     );
@@ -196,7 +196,7 @@ describe("MCP endpoint", () => {
       method: "POST",
       url: "/mcp",
       headers: MCP_HEADERS,
-      payload: rpc("tools/call", { name: "instance_term", arguments: { id: "missing" } }),
+      payload: rpc("tools/call", { name: "get_instance_term", arguments: { id: "missing" } }),
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();

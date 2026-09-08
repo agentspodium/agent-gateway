@@ -67,8 +67,8 @@ curl -s -X POST https://mcp.agentspodium.com/mcp \
 ```
 
 Tools: `list_platforms`, `list_instances`, `create_instance`,
-`instance_health`, `instance_term`, `set_llm_key`, `pause_instance`,
-`resume_instance`, `rebuild_instance`, `delete_instance`, `payment_options`,
+`get_instance_health`, `get_instance_term`, `set_llm_key`, `pause_instance`,
+`resume_instance`, `rebuild_instance`, `delete_instance`, `get_payment_options`,
 `set_peers`. Plus one resource, `agentspodium://docs` (the hosting docs).
 
 ### A2A — `a2a.agentspodium.com/`

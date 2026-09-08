@@ -228,7 +228,7 @@ export async function createInstance(ctx: GatewayContext, rawInput: unknown) {
     endpointUrl: agent.endpointUrl,
     a2aUrl: agent.a2aUrl,
     a2aToken: agent.a2aToken ?? null,
-    next: "poll instance_health until serving, then set_llm_key",
+    next: "poll get_instance_health until serving, then set_llm_key",
   };
 }
 

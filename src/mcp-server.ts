@@ -74,7 +74,7 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   const server = new McpServer(
     {
       name: "agentspodium-hosting",
-      version: "1.0.2",
+      version: "1.0.3",
       title: "AgentsPodium Hosting",
       websiteUrl: "https://hosting.defispace.com/docs/mcp.html",
       icons: [
@@ -86,7 +86,7 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
       instructions: [
         "AgentsPodium Hosting turns an AgentsPodium account into deployable AI agent pods (instances): pick an engine and hosting tier, deploy one, wire in the customer's own LLM key, and manage its lifecycle and billing.",
         "Every tool that touches an account requires an AgentsPodium API key (ak_live_...), created at https://agentspodium.com/account, except list_platforms which reads the public engine/tier catalogue.",
-        "Recommended order: list_platforms to choose an engine and tier, then create_instance, then poll instance_health until serving is true, then set_llm_key so the pod can actually answer, then instance_term to check the billing clock.",
+        "Recommended order: list_platforms to choose an engine and tier, then create_instance, then poll get_instance_health until serving is true, then set_llm_key so the pod can actually answer, then get_instance_term to check the billing clock.",
         "Full docs, including every tool's request/response shape: https://hosting.defispace.com/llms.txt.",
       ].join(" "),
     },
@@ -110,9 +110,9 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
               "Deploy a pod on AgentsPodium with the tools of this server, in this order:",
               "1. list_platforms — pick an engine and a plan (check minTier).",
               "2. create_instance — tier is required; keep the returned a2aToken if enableA2A.",
-              "3. instance_health — poll every 5 s until serving is true (boot takes ~10 s after running).",
+              "3. get_instance_health — poll every 5 s until serving is true (boot takes ~10 s after running).",
               "4. set_llm_key — install the customer's own model key (provider + key + model id the provider publishes); the pod answers nothing without it.",
-              "5. instance_term — note stopsAt/deletesAt; the first 7 days are free, then pay via payment_options.",
+              "5. get_instance_term — note stopsAt/deletesAt; the first 7 days are free, then pay via get_payment_options.",
               "Docs: https://hosting.defispace.com/llms.txt",
             ].join("\n"),
           },
@@ -153,7 +153,7 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
       title: "Create instance",
       description:
         "Create (deploy) a new AgentsPodium instance. Returns the instance id and, when enableA2A is true, the a2aUrl and a2aToken the caller should keep. " +
-        "After creating, poll instance_health until it is serving, then call set_llm_key to give it a working LLM key.",
+        "After creating, poll get_instance_health until it is serving, then call set_llm_key to give it a working LLM key.",
       inputSchema: createInstanceInputSchema,
       outputSchema: createInstanceOutputSchema,
       annotations: { openWorldHint: true },
@@ -162,7 +162,7 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   );
 
   server.registerTool(
-    "instance_health",
+    "get_instance_health",
     {
       title: "Check instance health",
       description: "Check whether an instance is reachable and serving, plus its status and quota state.",
@@ -174,7 +174,7 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   );
 
   server.registerTool(
-    "instance_term",
+    "get_instance_term",
     {
       title: "Get billing term",
       description: "Get the billing term (trial/paid/grace) for an instance, including when it renews or expires.",
@@ -247,7 +247,7 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   );
 
   server.registerTool(
-    "payment_options",
+    "get_payment_options",
     {
       title: "Get payment options",
       description:
