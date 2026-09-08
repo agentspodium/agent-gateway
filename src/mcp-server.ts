@@ -77,7 +77,10 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
       version: "1.0.2",
       title: "AgentsPodium Hosting",
       websiteUrl: "https://hosting.defispace.com/docs/mcp.html",
-      icons: [{ src: "https://hosting.defispace.com/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+      icons: [
+        { src: "https://hosting.defispace.com/icon-512.png", mimeType: "image/png", sizes: ["512x512"] },
+        { src: "https://hosting.defispace.com/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+      ],
     },
     {
       instructions: [

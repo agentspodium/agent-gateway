@@ -87,6 +87,7 @@ describe("MCP endpoint", () => {
     expect(serverInfo.title).toBe("AgentsPodium Hosting");
     expect(serverInfo.websiteUrl).toBe("https://hosting.defispace.com/docs/mcp.html");
     expect(serverInfo.icons).toEqual([
+      { src: "https://hosting.defispace.com/icon-512.png", mimeType: "image/png", sizes: ["512x512"] },
       { src: "https://hosting.defispace.com/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
     ]);
   });
