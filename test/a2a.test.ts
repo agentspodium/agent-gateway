@@ -67,6 +67,8 @@ describe("A2A endpoint", () => {
     });
     expect(hello.statusCode).toBe(200);
     expect(hello.json().result.status.state).toBe("completed");
+    expect(hello.json().result.kind).toBe("task");
+    expect(typeof hello.json().result.contextId).toBe("string");
     expect(hello.json().result.artifacts[0].parts[0].text).toContain("create-instance");
 
     const platforms = await app.inject({
@@ -105,7 +107,7 @@ describe("A2A endpoint", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.id).toBe(42);
-    expect(body.result.status).toEqual({ state: "completed" });
+    expect(body.result.status).toMatchObject({ state: "completed" });
     const dataPart = body.result.artifacts[0].parts.find((p: { kind: string }) => p.kind === "data");
     expect(dataPart.data.term.status).toBe("trial");
     const textPart = body.result.artifacts[0].parts.find((p: { kind: string }) => p.kind === "text");

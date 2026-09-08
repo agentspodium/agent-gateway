@@ -121,10 +121,15 @@ interface TextPart {
 }
 type Part = DataPart | TextPart;
 
+/* The exact Task shape of A2A 0.3: `kind` is the discriminator SDK clients
+   parse on, `contextId` is required, and a status carries its timestamp.
+   The A2A Registry's probe rejected the previous shape as unparseable. */
 function buildTask(parts: Array<{ kind: "data"; data: unknown } | { kind: "text"; text: string }>) {
   return {
     id: `task-${randomUUID()}`,
-    status: { state: "completed" as const },
+    contextId: `ctx-${randomUUID()}`,
+    kind: "task" as const,
+    status: { state: "completed" as const, timestamp: new Date().toISOString() },
     artifacts: [{ artifactId: randomUUID(), parts }],
   };
 }
