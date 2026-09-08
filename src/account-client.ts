@@ -33,7 +33,9 @@ export class AccountClient {
     token: string,
     body?: unknown,
   ): Promise<unknown> {
-    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    // list_platforms is the one tool allowed to run without a caller token
+    // (public catalogue data); don't send a meaningless "Bearer " header for it.
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     let payload: string | undefined;
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";

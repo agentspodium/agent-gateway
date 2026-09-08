@@ -7,9 +7,17 @@ import { ApiError } from "./account-client.js";
 import { fetchDocsText } from "./docs-cache.js";
 import type { GatewayContext } from "./tools.js";
 import {
+  agentSummarySchema,
   createInstanceInputSchema,
+  createInstanceOutputSchema,
+  deleteInstanceOutputSchema,
   emptyInputSchema,
   idInputSchema,
+  instanceHealthOutputSchema,
+  instanceTermOutputSchema,
+  listInstancesOutputSchema,
+  listPlatformsOutputSchema,
+  paymentOptionsOutputSchema,
   setLlmKeyInputSchema,
   setPeersInputSchema,
   createInstance,
@@ -27,7 +35,9 @@ import {
 } from "./tools.js";
 
 /** Wraps a shared implementation function into an MCP tool callback, turning
-    account-API errors into `isError` results instead of thrown exceptions. */
+    account-API errors into `isError` results instead of thrown exceptions.
+    On success, `structuredContent` mirrors the tool's declared `outputSchema`
+    (the SDK validates it against that schema) alongside the human-readable text. */
 function toolHandler(
   fn: (ctx: GatewayContext, input: unknown) => Promise<unknown>,
   ctx: GatewayContext,
@@ -35,7 +45,10 @@ function toolHandler(
   return async (input: unknown): Promise<CallToolResult> => {
     try {
       const result = await fn(ctx, input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result as Record<string, unknown>,
+      };
     } catch (err) {
       if (err instanceof ApiError) {
         return {
@@ -58,7 +71,23 @@ function toolHandler(
 }
 
 export function buildMcpServer(ctx: GatewayContext): McpServer {
-  const server = new McpServer({ name: "agentspodium-hosting", version: "1.0.1" });
+  const server = new McpServer(
+    {
+      name: "agentspodium-hosting",
+      version: "1.0.2",
+      title: "AgentsPodium Hosting",
+      websiteUrl: "https://hosting.defispace.com/docs/mcp.html",
+      icons: [{ src: "https://hosting.defispace.com/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+    },
+    {
+      instructions: [
+        "AgentsPodium Hosting turns an AgentsPodium account into deployable AI agent pods (instances): pick an engine and hosting tier, deploy one, wire in the customer's own LLM key, and manage its lifecycle and billing.",
+        "Every tool that touches an account requires an AgentsPodium API key (ak_live_...), created at https://agentspodium.com/account, except list_platforms which reads the public engine/tier catalogue.",
+        "Recommended order: list_platforms to choose an engine and tier, then create_instance, then poll instance_health until serving is true, then set_llm_key so the pod can actually answer, then instance_term to check the billing clock.",
+        "Full docs, including every tool's request/response shape: https://hosting.defispace.com/llms.txt.",
+      ].join(" "),
+    },
+  );
 
   /* One prompt, so clients that list prompts get an answer instead of
      "method not found", and so a person can start from a checklist. */
@@ -92,9 +121,12 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   server.registerTool(
     "list_platforms",
     {
+      title: "List platforms and plans",
       description:
         "List available AgentsPodium engines (platforms) and hosting plans (tiers), with prices and capabilities.",
       inputSchema: emptyInputSchema,
+      outputSchema: listPlatformsOutputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     toolHandler(listPlatforms, ctx),
   );
@@ -102,9 +134,12 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   server.registerTool(
     "list_instances",
     {
+      title: "List instances",
       description:
         "List the caller's AgentsPodium instances (agents): id, name, engine, tier, status, endpoint and A2A URL, domain, creation date. Never returns secrets.",
       inputSchema: emptyInputSchema,
+      outputSchema: listInstancesOutputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     toolHandler(listInstances, ctx),
   );
@@ -112,10 +147,13 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   server.registerTool(
     "create_instance",
     {
+      title: "Create instance",
       description:
         "Create (deploy) a new AgentsPodium instance. Returns the instance id and, when enableA2A is true, the a2aUrl and a2aToken the caller should keep. " +
         "After creating, poll instance_health until it is serving, then call set_llm_key to give it a working LLM key.",
       inputSchema: createInstanceInputSchema,
+      outputSchema: createInstanceOutputSchema,
+      annotations: { openWorldHint: true },
     },
     toolHandler(createInstance, ctx),
   );
@@ -123,8 +161,11 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   server.registerTool(
     "instance_health",
     {
+      title: "Check instance health",
       description: "Check whether an instance is reachable and serving, plus its status and quota state.",
       inputSchema: idInputSchema,
+      outputSchema: instanceHealthOutputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     toolHandler(instanceHealth, ctx),
   );
@@ -132,8 +173,11 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   server.registerTool(
     "instance_term",
     {
+      title: "Get billing term",
       description: "Get the billing term (trial/paid/grace) for an instance, including when it renews or expires.",
       inputSchema: idInputSchema,
+      outputSchema: instanceTermOutputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     toolHandler(instanceTerm, ctx),
   );
@@ -141,43 +185,73 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   server.registerTool(
     "set_llm_key",
     {
+      title: "Set LLM key",
       description:
         "Set (or clear, with key=null) the LLM provider API key an instance uses to answer. Required before a freshly created instance can actually respond.",
       inputSchema: setLlmKeyInputSchema,
+      outputSchema: agentSummarySchema,
+      annotations: { idempotentHint: true, openWorldHint: true },
     },
     toolHandler(setLlmKey, ctx),
   );
 
   server.registerTool(
     "pause_instance",
-    { description: "Pause an instance: stops it and its billing lease. Data is archived, not deleted.", inputSchema: idInputSchema },
+    {
+      title: "Pause instance",
+      description: "Pause an instance: stops it and its billing lease. Data is archived, not deleted.",
+      inputSchema: idInputSchema,
+      outputSchema: agentSummarySchema,
+      annotations: { idempotentHint: true, openWorldHint: true },
+    },
     toolHandler(pauseInstance, ctx),
   );
 
   server.registerTool(
     "resume_instance",
-    { description: "Resume a previously paused instance, rebuilding it from its archive.", inputSchema: idInputSchema },
+    {
+      title: "Resume instance",
+      description: "Resume a previously paused instance, rebuilding it from its archive.",
+      inputSchema: idInputSchema,
+      outputSchema: agentSummarySchema,
+      annotations: { idempotentHint: true, openWorldHint: true },
+    },
     toolHandler(resumeInstance, ctx),
   );
 
   server.registerTool(
     "rebuild_instance",
-    { description: "Rebuild an instance's pod (e.g. after a config change that needs a restart).", inputSchema: idInputSchema },
+    {
+      title: "Rebuild instance",
+      description: "Rebuild an instance's pod (e.g. after a config change that needs a restart).",
+      inputSchema: idInputSchema,
+      outputSchema: agentSummarySchema,
+      annotations: { destructiveHint: true, openWorldHint: true },
+    },
     toolHandler(rebuildInstance, ctx),
   );
 
   server.registerTool(
     "delete_instance",
-    { description: "Permanently delete an instance. This cannot be undone.", inputSchema: idInputSchema },
+    {
+      title: "Delete instance",
+      description: "Permanently delete an instance. This cannot be undone.",
+      inputSchema: idInputSchema,
+      outputSchema: deleteInstanceOutputSchema,
+      annotations: { destructiveHint: true, openWorldHint: true },
+    },
     toolHandler(deleteInstance, ctx),
   );
 
   server.registerTool(
     "payment_options",
     {
+      title: "Get payment options",
       description:
         "Get ways to pay for an instance's plan: card/subscription buy links, crypto payment info, and Telegram Stars info (crypto and Stars are in beta testing), plus the instance's current term.",
       inputSchema: idInputSchema,
+      outputSchema: paymentOptionsOutputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     toolHandler(paymentOptions, ctx),
   );
@@ -185,8 +259,11 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   server.registerTool(
     "set_peers",
     {
+      title: "Set A2A peers",
       description: "Set the list of other A2A agents this instance is allowed to call by name.",
       inputSchema: setPeersInputSchema,
+      outputSchema: agentSummarySchema,
+      annotations: { idempotentHint: true, openWorldHint: true },
     },
     toolHandler(setPeers, ctx),
   );

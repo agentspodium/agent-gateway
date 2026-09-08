@@ -129,11 +129,12 @@ export function buildApp({ config, fetchImpl }: BuildAppOptions): FastifyInstanc
         type: "string",
         title: "AgentsPodium API key",
         description:
-          "Create at https://agentspodium.com/account (API keys for agents). Sent as Authorization: Bearer, x-api-key header, or apiKey query parameter.",
+          "Create at https://agentspodium.com/account (API keys for agents). Sent as Authorization: Bearer, x-api-key header, or apiKey query parameter. " +
+          "Needed for every tool except list_platforms, which returns public catalogue data.",
         "x-secret": true,
       },
     },
-    required: ["apiKey"],
+    required: [],
   }));
 
   app.get("/", async (request, reply) => {
@@ -147,16 +148,25 @@ export function buildApp({ config, fetchImpl }: BuildAppOptions): FastifyInstanc
   /* Directories add a server by URL and probe it with initialize and
      tools/list before anyone has a key — those calls reveal nothing about a
      customer, so they work without one. Anything that touches an account
-     (tools/call) still needs the bearer. */
+     (tools/call) still needs the bearer, except list_platforms, which is
+     just the public engine/tier catalogue. */
   const DISCOVERY = new Set([
     "initialize", "notifications/initialized", "ping", "tools/list",
     "resources/list", "resources/templates/list", "resources/read", "prompts/list",
   ]);
   app.post("/mcp", async (request, reply) => {
     const token = extractApiKey(request);
-    const body = request.body as { method?: string } | { method?: string }[] | undefined;
-    const methods = (Array.isArray(body) ? body : [body]).map((m) => String(m?.method ?? ""));
-    const needsToken = methods.some((m) => !DISCOVERY.has(m));
+    const body = request.body as
+      | { method?: string; params?: { name?: string } }
+      | { method?: string; params?: { name?: string } }[]
+      | undefined;
+    const messages = Array.isArray(body) ? body : [body];
+    const needsToken = messages.some((m) => {
+      const method = String(m?.method ?? "");
+      if (DISCOVERY.has(method)) return false;
+      if (method === "tools/call" && m?.params?.name === "list_platforms") return false;
+      return true;
+    });
     if (!token && needsToken) {
       reply.code(401);
       return MISSING_AUTH_BODY;

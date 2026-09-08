@@ -48,7 +48,9 @@ describe("MCP endpoint", () => {
     });
     expect(viaQuery.statusCode).toBe(200);
     const schema = await app.inject({ method: "GET", url: "/.well-known/mcp-config" });
-    expect(schema.json().required).toEqual(["apiKey"]);
+    const schemaBody = schema.json();
+    expect(schemaBody.required).toEqual([]);
+    expect(schemaBody.properties.apiKey.description).toContain("list_platforms");
   });
 
   it("answers tools/list without a key (directories probe by URL) but refuses tools/call", async () => {
@@ -67,6 +69,66 @@ describe("MCP endpoint", () => {
     const body = call.json();
     expect(body.error).toBe("UNAUTHORIZED");
     expect(body.message).toContain("agentspodium.com/account");
+  });
+
+  it("initialize's serverInfo carries title, websiteUrl and icons", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/mcp",
+      headers: MCP_HEADERS,
+      payload: rpc("initialize", {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "test-client", version: "0.0.0" },
+      }),
+    });
+    expect(res.statusCode).toBe(200);
+    const serverInfo = res.json().result.serverInfo;
+    expect(serverInfo.title).toBe("AgentsPodium Hosting");
+    expect(serverInfo.websiteUrl).toBe("https://hosting.defispace.com/docs/mcp.html");
+    expect(serverInfo.icons).toEqual([
+      { src: "https://hosting.defispace.com/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+    ]);
+  });
+
+  it("tools/list entries all carry title, description, annotations and outputSchema", async () => {
+    const res = await app.inject({ method: "POST", url: "/mcp", headers: MCP_HEADERS, payload: rpc("tools/list") });
+    const tools = res.json().result.tools as Array<Record<string, unknown>>;
+    expect(tools.length).toBe(12);
+    for (const tool of tools) {
+      expect(tool.title, `${tool.name} title`).toBeTruthy();
+      expect(tool.description, `${tool.name} description`).toBeTruthy();
+      expect(tool.annotations, `${tool.name} annotations`).toBeTruthy();
+      expect((tool.annotations as Record<string, unknown>).openWorldHint, `${tool.name} openWorldHint`).toBe(true);
+      expect(tool.outputSchema, `${tool.name} outputSchema`).toBeTruthy();
+    }
+  });
+
+  it("tools/call list_platforms works without a key and returns structuredContent", async () => {
+    const headers = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+    const res = await app.inject({
+      method: "POST",
+      url: "/mcp",
+      headers,
+      payload: rpc("tools/call", { name: "list_platforms", arguments: {} }),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.result.isError).toBeFalsy();
+    expect(body.result.structuredContent.engines.length).toBeGreaterThan(0);
+    expect(body.result.structuredContent.tiers.length).toBeGreaterThan(0);
+  });
+
+  it("tools/call list_instances without a key still gets 401", async () => {
+    const headers = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+    const res = await app.inject({
+      method: "POST",
+      url: "/mcp",
+      headers,
+      payload: rpc("tools/call", { name: "list_instances", arguments: {} }),
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error).toBe("UNAUTHORIZED");
   });
 
   it("tools/list shows every tool", async () => {
