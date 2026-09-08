@@ -4,11 +4,11 @@
   "title": "AgentsPodium Hosting",
   "description": "Create, watch, pay for and connect hosted AI agent pods on AgentsPodium. Needs an API key.",
   "repository": {
-    "url": "https://github.com/agentspodium/agentspodium-skills",
+    "url": "https://github.com/agentspodium/agent-gateway",
     "source": "github"
   },
   "websiteUrl": "https://hosting.defispace.com/docs/mcp.html",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "remotes": [
     {
       "type": "streamable-http",

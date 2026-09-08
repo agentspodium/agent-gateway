@@ -58,7 +58,36 @@ function toolHandler(
 }
 
 export function buildMcpServer(ctx: GatewayContext): McpServer {
-  const server = new McpServer({ name: "agentspodium-hosting", version: "0.1.0" });
+  const server = new McpServer({ name: "agentspodium-hosting", version: "1.0.1" });
+
+  /* One prompt, so clients that list prompts get an answer instead of
+     "method not found", and so a person can start from a checklist. */
+  server.registerPrompt(
+    "deploy-checklist",
+    {
+      description: "Step-by-step checklist to deploy an AI agent pod on AgentsPodium and make it answer.",
+      argsSchema: {},
+    },
+    () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: [
+              "Deploy a pod on AgentsPodium with the tools of this server, in this order:",
+              "1. list_platforms — pick an engine and a plan (check minTier).",
+              "2. create_instance — tier is required; keep the returned a2aToken if enableA2A.",
+              "3. instance_health — poll every 5 s until serving is true (boot takes ~10 s after running).",
+              "4. set_llm_key — install the customer's own model key (provider + key + model id the provider publishes); the pod answers nothing without it.",
+              "5. instance_term — note stopsAt/deletesAt; the first 7 days are free, then pay via payment_options.",
+              "Docs: https://hosting.defispace.com/llms.txt",
+            ].join("\n"),
+          },
+        },
+      ],
+    }),
+  );
 
   server.registerTool(
     "list_platforms",
