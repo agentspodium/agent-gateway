@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.agentspodium/hosting",
+  "title": "AgentsPodium Hosting",
+  "description": "Create, watch, pay for and connect hosted AI agent pods on AgentsPodium. Needs an API key.",
+  "repository": {
+    "url": "https://github.com/agentspodium/agentspodium-skills",
+    "source": "github"
+  },
+  "websiteUrl": "https://hosting.defispace.com/docs/mcp.html",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.agentspodium.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <AgentsPodium API key, ak_live_…>. Create one at https://agentspodium.com/account (API keys for agents).",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

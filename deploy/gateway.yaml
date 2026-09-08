@@ -1,0 +1,95 @@
+# MCP + A2A gateway: stateless, no volume, no secrets of its own — every
+# request carries the customer's own AgentsPodium API key, forwarded to the
+# account API. Both hostnames route to the same Deployment/Service; the
+# process picks MCP vs A2A behaviour from the Host header.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ap-agentgw
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-gateway
+  namespace: ap-agentgw
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: agent-gateway }
+  template:
+    metadata:
+      labels: { app: agent-gateway }
+    spec:
+      containers:
+        - name: agent-gateway
+          image: docker.io/ssidid/agentpodium-agent-gateway:__IMAGE_TAG__
+          ports: [{ containerPort: 3200 }]
+          env:
+            - { name: ACCOUNT_API, value: "https://agentspodium.com/api" }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 3200 }
+            initialDelaySeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "1", memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-gateway
+  namespace: ap-agentgw
+spec:
+  selector: { app: agent-gateway }
+  ports: [{ port: 80, targetPort: 3200 }]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp.agentspodium.com
+  namespace: ap-agentgw
+spec:
+  hostnames: [mcp.agentspodium.com]
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: akash-gateway
+      namespace: akash-gateway
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: agent-gateway
+          port: 80
+          weight: 1
+      matches:
+        - path: { type: PathPrefix, value: / }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: a2a.agentspodium.com
+  namespace: ap-agentgw
+spec:
+  hostnames: [a2a.agentspodium.com]
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: akash-gateway
+      namespace: akash-gateway
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: agent-gateway
+          port: 80
+          weight: 1
+      # a2a.agentspodium.com itself is the platform's agent directory
+      # (a2a-router in ap-account). The hosting service lives under /hosting/;
+      # the longer prefix wins over the directory's "/" and the prefix is
+      # stripped before the request reaches the gateway process.
+      matches:
+        - path: { type: PathPrefix, value: /hosting }
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path: { type: ReplacePrefixMatch, replacePrefixMatch: / }
