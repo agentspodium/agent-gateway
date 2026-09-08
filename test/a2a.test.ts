@@ -31,7 +31,9 @@ describe("A2A endpoint", () => {
     const card = res.json();
     expect(card.name).toBe("AgentsPodium Hosting");
     expect(card.url).toBe("https://a2a.agentspodium.com/hosting/");
-    expect(card.capabilities).toEqual({ streaming: false });
+    expect(card.protocolVersion).toBe("0.3.0");
+    expect(card.capabilities).toEqual({ streaming: false, pushNotifications: false, stateTransitionHistory: false });
+    for (const s of card.skills) expect(s.outputModes).toContain("application/json");
     expect(card.defaultInputModes).toContain("text/plain");
     expect(card.defaultOutputModes).toEqual(expect.arrayContaining(["application/json", "text/plain"]));
     expect(card.securitySchemes.bearerAuth).toMatchObject({ type: "http", scheme: "bearer" });
@@ -45,7 +47,7 @@ describe("A2A endpoint", () => {
       expect(skill.description).toBeTruthy();
       expect(Array.isArray(skill.tags)).toBe(true);
       expect(Array.isArray(skill.examples)).toBe(true);
-      expect(skill.inputModes).toEqual(["application/json"]);
+      expect(skill.inputModes).toEqual(["application/json", "text/plain"]);
     }
   });
 
@@ -55,14 +57,35 @@ describe("A2A endpoint", () => {
     expect(res.json().agents[0].slug).toBe("demo");
   });
 
-  it("returns 401 with a helpful body when Authorization is missing", async () => {
-    const res = await app.inject({
+  it("without a key: help and the catalogue answer, an account question is a JSON-RPC error", async () => {
+    /* A registry's probe sends plain text with no credential; it must get a
+       completed task back, not a transport-level 401. */
+    const hello = await app.inject({
       method: "POST",
       url: "/",
-      payload: { jsonrpc: "2.0", id: 1, method: "message/send", params: {} },
+      payload: { jsonrpc: "2.0", id: 1, method: "message/send", params: { message: { parts: [{ kind: "text", text: "hello" }] } } },
     });
-    expect(res.statusCode).toBe(401);
-    expect(res.json().error).toBe("UNAUTHORIZED");
+    expect(hello.statusCode).toBe(200);
+    expect(hello.json().result.status.state).toBe("completed");
+    expect(hello.json().result.artifacts[0].parts[0].text).toContain("create-instance");
+
+    const platforms = await app.inject({
+      method: "POST",
+      url: "/",
+      payload: { jsonrpc: "2.0", id: 2, method: "message/send", params: { message: { parts: [{ kind: "text", text: "platforms" }] } } },
+    });
+    expect(platforms.statusCode).toBe(200);
+    expect(platforms.json().result).toBeDefined();
+
+    const term = await app.inject({
+      method: "POST",
+      url: "/",
+      payload: { jsonrpc: "2.0", id: 3, method: "message/send", params: { message: { parts: [{ kind: "text", text: "term agt_1" }] } } },
+    });
+    expect(term.statusCode).toBe(200);
+    expect(term.json().error.code).toBe(-32001);
+    expect(term.json().error.data.code).toBe("UNAUTHORIZED");
+    expect(term.json().error.message).toContain("agentspodium.com/account");
   });
 
   it("message/send with a data part for instance-term returns a completed task with the term", async () => {

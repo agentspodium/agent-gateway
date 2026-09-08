@@ -5,6 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
 import { ApiError } from "./account-client.js";
+import { MISSING_AUTH_BODY } from "./auth.js";
 import { parseTextCommand, SKILLS_HELP_TEXT } from "./a2a-commands.js";
 import type { GatewayContext } from "./tools.js";
 import { createInstance, instanceHealth, instanceTerm, listPlatforms, paymentOptions } from "./tools.js";
@@ -33,17 +34,30 @@ function isSkillId(value: string): value is SkillId {
 /** Builds the AgentCard for the gateway itself (not for a customer's own agent). */
 export function buildAgentCard(baseUrl: string) {
   const url = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  /* The fields directories validate against the A2A spec (protocolVersion,
+     the three capability flags, per-skill output modes) are all here, so a
+     schema-checking registry marks the card conformant rather than "close". */
   return {
+    protocolVersion: "0.3.0",
     name: "AgentsPodium Hosting",
     description:
-      "Create, monitor and manage AgentsPodium-hosted AI agent instances. Backed by the same account API as the AgentsPodium dashboard; every call needs the caller's own AgentsPodium API key.",
+      "Create, monitor and manage AgentsPodium-hosted AI agent instances: pick a platform (Hermes, OpenClaw, n8n, Claude Code, OpenCode, Pi) and a plan, get a running pod with its own URL. Backed by the same account API as the AgentsPodium dashboard. Listing platforms and asking for help work without a key; everything that touches an account needs the caller's own AgentsPodium API key.",
     url,
-    version: "0.1.0",
-    provider: { organization: "AgentsPodium", url },
-    capabilities: { streaming: false },
-    defaultInputModes: ["text/plain"],
+    preferredTransport: "JSONRPC",
+    version: "0.2.0",
+    provider: { organization: "AgentsPodium", url: "https://hosting.defispace.com/" },
+    documentationUrl: "https://hosting.defispace.com/docs/a2a.html",
+    iconUrl: "https://hosting.defispace.com/icon-512.png",
+    capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
+    defaultInputModes: ["text/plain", "application/json"],
     defaultOutputModes: ["application/json", "text/plain"],
-    securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },
+    securitySchemes: {
+      bearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        description: "An AgentsPodium API key (ak_live_…) from https://agentspodium.com/account, \"API keys for agents\".",
+      },
+    },
     security: [{ bearerAuth: [] }],
     skills: [
       {
@@ -53,7 +67,8 @@ export function buildAgentCard(baseUrl: string) {
           "Deploy a new AgentsPodium instance (engine + plan tier). Returns the instance id, endpoint URL, and (when enableA2A) its own a2aUrl/a2aToken.",
         tags: ["hosting", "deploy", "instance"],
         examples: ['{"skill":"create-instance","params":{"engine":"hermes","tier":"small","name":"My Agent"}}', "create hermes small My Agent"],
-        inputModes: ["application/json"],
+        inputModes: ["application/json", "text/plain"],
+        outputModes: ["application/json", "text/plain"],
       },
       {
         id: "instance-health",
@@ -61,7 +76,8 @@ export function buildAgentCard(baseUrl: string) {
         description: "Check whether an instance is reachable and serving, plus its status and quota state.",
         tags: ["hosting", "status", "health"],
         examples: ['{"skill":"instance-health","params":{"id":"agt_123"}}', "health agt_123"],
-        inputModes: ["application/json"],
+        inputModes: ["application/json", "text/plain"],
+        outputModes: ["application/json", "text/plain"],
       },
       {
         id: "instance-term",
@@ -69,7 +85,8 @@ export function buildAgentCard(baseUrl: string) {
         description: "Get an instance's billing term: trial, paid, or grace period, and renewal/expiry dates.",
         tags: ["hosting", "billing"],
         examples: ['{"skill":"instance-term","params":{"id":"agt_123"}}', "term agt_123"],
-        inputModes: ["application/json"],
+        inputModes: ["application/json", "text/plain"],
+        outputModes: ["application/json", "text/plain"],
       },
       {
         id: "list-platforms",
@@ -77,7 +94,8 @@ export function buildAgentCard(baseUrl: string) {
         description: "List available engines (platforms) and hosting plans (tiers), with prices and capabilities.",
         tags: ["hosting", "catalog"],
         examples: ['{"skill":"list-platforms","params":{}}', "platforms"],
-        inputModes: ["application/json"],
+        inputModes: ["application/json", "text/plain"],
+        outputModes: ["application/json", "text/plain"],
       },
       {
         id: "payment-options",
@@ -86,7 +104,8 @@ export function buildAgentCard(baseUrl: string) {
           "Get ways to pay for an instance's plan: card/subscription buy links, crypto info, and Telegram Stars info (crypto and Stars are in beta testing).",
         tags: ["hosting", "billing", "payment"],
         examples: ['{"skill":"payment-options","params":{"id":"agt_123"}}', "payment agt_123"],
-        inputModes: ["application/json"],
+        inputModes: ["application/json", "text/plain"],
+        outputModes: ["application/json", "text/plain"],
       },
     ],
   };
@@ -170,6 +189,14 @@ export async function handleJsonRpc(ctx: GatewayContext, body: unknown): Promise
 
   if (!skillId || !isSkillId(skillId)) {
     return { jsonrpc: "2.0", id: req.id, result: buildTask([{ kind: "text", text: SKILLS_HELP_TEXT }]) };
+  }
+
+  /* A registry's smoke probe, or an agent still deciding whether to sign up,
+     arrives with no key. The public catalogue and the help text answer them;
+     anything about an account is refused as a JSON-RPC error (the transport
+     itself stays 200, as the A2A spec wants for protocol-level errors). */
+  if (!ctx.token && skillId !== "list-platforms") {
+    return rpcError(req.id, -32001, MISSING_AUTH_BODY.message, { status: 401, code: MISSING_AUTH_BODY.error });
   }
 
   try {

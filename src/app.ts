@@ -69,12 +69,13 @@ Endpoint:   POST ${config.a2aBaseUrl}
 
 ## Auth
 
-Every call must carry your AgentsPodium API key:
+Every call about an account must carry your AgentsPodium API key:
 
   Authorization: Bearer ak_live_...
 
 Create one at https://agentspodium.com/account ("API keys for agents").
 Docs: https://hosting.defispace.com/docs/auth
+Without a key: "platforms" (the public catalogue) and any other text (the help).
 
 ## Example
 
@@ -214,13 +215,12 @@ export function buildApp({ config, fetchImpl }: BuildAppOptions): FastifyInstanc
     }
   });
 
-  app.post("/", async (request, reply) => {
+  /* No key is not a transport error here: message/send without one still
+     gets the platform list or the help text, and a JSON-RPC error for the
+     rest — see handleJsonRpc. */
+  app.post("/", async (request) => {
     const token = extractApiKey(request);
-    if (!token) {
-      reply.code(401);
-      return MISSING_AUTH_BODY;
-    }
-    return handleJsonRpc({ client, token }, request.body);
+    return handleJsonRpc({ client, token: token ?? "" }, request.body);
   });
 
   return app;
