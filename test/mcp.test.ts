@@ -95,7 +95,7 @@ describe("MCP endpoint", () => {
   it("tools/list entries all carry title, description, annotations and outputSchema", async () => {
     const res = await app.inject({ method: "POST", url: "/mcp", headers: MCP_HEADERS, payload: rpc("tools/list") });
     const tools = res.json().result.tools as Array<Record<string, unknown>>;
-    expect(tools.length).toBe(12);
+    expect(tools.length).toBe(13);
     for (const tool of tools) {
       expect(tool.title, `${tool.name} title`).toBeTruthy();
       expect(tool.description, `${tool.name} description`).toBeTruthy();
@@ -151,9 +151,10 @@ describe("MCP endpoint", () => {
         "delete_instance",
         "get_payment_options",
         "set_peers",
+        "set_webhook",
       ]),
     );
-    expect(names).toHaveLength(12);
+    expect(names).toHaveLength(13);
   });
 
   it("create_instance posts the right body (enableA2A adds the a2a toolset) and returns a2aUrl", async () => {

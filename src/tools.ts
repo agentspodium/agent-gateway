@@ -45,6 +45,23 @@ export const createInstanceInputSchema = z.object({
     .describe("Turn on the A2A toolset and issue an a2aUrl/a2aToken for this instance."),
   domain: z.string().max(253).optional().describe("Customer-owned domain to serve the instance from."),
   extraSoul: z.string().max(4000).optional().describe("Extra system-prompt instructions appended to the persona."),
+  webhookUrl: z
+    .string()
+    .max(500)
+    .optional()
+    .describe("Public http(s) URL to receive signed pod events (agent.running, agent.stopped, agent.failed, agent.deleted, payment.confirmed, deletion.warning) instead of polling. The signing secret comes back once as webhookSecret."),
+});
+
+export const setWebhookInputSchema = z.object({
+  id: z.string().min(1).describe("Instance (agent) id, as returned by create_instance or list_instances."),
+  url: z.string().min(8).max(500).describe("Public http(s) URL to POST signed pod events to. Private and loopback hosts are refused."),
+});
+
+export const setWebhookOutputSchema = z.object({
+  id: z.string().describe("Instance id."),
+  url: z.string().describe("The webhook URL now in effect."),
+  secret: z.string().describe("HMAC-SHA256 key for X-AgentsPodium-Signature. Shown once — store it."),
+  events: z.array(z.string()).describe("Event types that will be delivered."),
 });
 
 export const setLlmKeyInputSchema = z.object({
@@ -137,6 +154,7 @@ export const createInstanceOutputSchema = z.object({
   endpointUrl: z.string().nullable().describe("Public HTTPS endpoint, or null until assigned."),
   a2aUrl: z.string().nullable().describe("A2A endpoint, or null if A2A was not enabled."),
   a2aToken: z.string().nullable().describe("A2A bearer token to keep, or null if A2A was not enabled."),
+  webhookSecret: z.string().nullable().describe("HMAC key for webhook signatures when webhookUrl was given (shown once), else null."),
   next: z.string().describe("Suggested next step for the caller."),
 });
 
@@ -217,10 +235,11 @@ export async function createInstance(ctx: GatewayContext, rawInput: unknown) {
     model: input.model,
     domain: input.domain,
     extraSoul: input.extraSoul,
+    webhookUrl: input.webhookUrl,
     tools,
   };
 
-  const res = (await ctx.client.post("/agents", ctx.token, body)) as { agent: AccountAgent };
+  const res = (await ctx.client.post("/agents", ctx.token, body)) as { agent: AccountAgent; webhookSecret?: string };
   const agent = res.agent;
   return {
     id: agent.id,
@@ -228,8 +247,20 @@ export async function createInstance(ctx: GatewayContext, rawInput: unknown) {
     endpointUrl: agent.endpointUrl,
     a2aUrl: agent.a2aUrl,
     a2aToken: agent.a2aToken ?? null,
-    next: "poll get_instance_health until serving, then set_llm_key",
+    webhookSecret: res.webhookSecret ?? null,
+    next: input.webhookUrl
+      ? "wait for the agent.running webhook (or poll get_instance_health), then set_llm_key"
+      : "poll get_instance_health until serving, then set_llm_key",
   };
+}
+
+export async function setWebhook(ctx: GatewayContext, rawInput: unknown) {
+  const { id, url } = setWebhookInputSchema.parse(rawInput);
+  const res = (await ctx.client.put(`/agents/${id}/webhook`, ctx.token, { url })) as {
+    agent: AccountAgent;
+    webhook: { url: string; secret: string; events: string[] };
+  };
+  return { id, url: res.webhook.url, secret: res.webhook.secret, events: res.webhook.events };
 }
 
 export async function instanceHealth(ctx: GatewayContext, rawInput: unknown) {

@@ -20,6 +20,8 @@ import {
   paymentOptionsOutputSchema,
   setLlmKeyInputSchema,
   setPeersInputSchema,
+  setWebhookInputSchema,
+  setWebhookOutputSchema,
   createInstance,
   deleteInstance,
   instanceHealth,
@@ -32,6 +34,7 @@ import {
   resumeInstance,
   setLlmKey,
   setPeers,
+  setWebhook,
 } from "./tools.js";
 
 /** Wraps a shared implementation function into an MCP tool callback, turning
@@ -74,7 +77,7 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
   const server = new McpServer(
     {
       name: "agentspodium-hosting",
-      version: "1.0.3",
+      version: "1.0.4",
       title: "AgentsPodium Hosting",
       websiteUrl: "https://hosting.defispace.com/docs/mcp.html",
       icons: [
@@ -269,6 +272,19 @@ export function buildMcpServer(ctx: GatewayContext): McpServer {
       annotations: { idempotentHint: true, openWorldHint: true },
     },
     toolHandler(setPeers, ctx),
+  );
+
+  server.registerTool(
+    "set_webhook",
+    {
+      title: "Set event webhook",
+      description:
+        "Register a URL that receives signed POSTs when the instance comes up, stops, fails, is deleted, when a payment is confirmed and before deletion for non-payment — instead of polling get_instance_health. Returns the HMAC secret once.",
+      inputSchema: setWebhookInputSchema,
+      outputSchema: setWebhookOutputSchema,
+      annotations: { idempotentHint: true, openWorldHint: true },
+    },
+    toolHandler(setWebhook, ctx),
   );
 
   server.registerResource(

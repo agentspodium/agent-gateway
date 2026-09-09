@@ -25,6 +25,7 @@ const MCP_TOOL_NAMES = [
   "delete_instance",
   "get_payment_options",
   "set_peers",
+  "set_webhook",
 ];
 
 function mcpLandingText(config: GatewayConfig): string {
